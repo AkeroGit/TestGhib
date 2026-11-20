@@ -1,0 +1,887 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Kettle Hill — A Ghibli-Style Exploration</title>
+  <style>
+    :root {
+      --sky-top: #8ecae6;
+      --sky-horizon: #ffb7b2;
+      --grass: #a8dba8;
+      --grass-dark: #7fb069;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: #bde0fe; }
+    canvas { display: block; position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 0; }
+
+    #ui {
+      position: absolute;
+      top: 0; left: 0; width: 100%; height: 100%;
+      pointer-events: none;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 24px;
+      font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+      color: #2c3e50;
+      z-index: 10;
+    }
+
+    #header {
+      pointer-events: auto;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 8px;
+      background: rgba(255, 255, 255, 0.72);
+      backdrop-filter: blur(10px);
+      padding: 18px 22px;
+      border-radius: 18px;
+      border: 1px solid rgba(255,255,255,0.55);
+      box-shadow: 0 6px 24px rgba(0,0,0,0.07);
+      max-width: 330px;
+      user-select: none;
+    }
+
+    h1 {
+      font-size: 24px;
+      letter-spacing: 0.4px;
+      font-weight: 800;
+      color: #4a5568;
+      text-shadow: 0 1px 2px rgba(255,255,255,0.7);
+      margin: 0;
+    }
+
+    p.sub {
+      font-size: 13.5px;
+      color: #6b7280;
+      line-height: 1.5;
+      margin: 0;
+    }
+
+    #controls {
+      pointer-events: auto;
+      margin-top: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      align-items: flex-start;
+    }
+
+    button {
+      background: #ffffff;
+      border: 1px solid rgba(0,0,0,0.10);
+      color: #374151;
+      padding: 9px 16px;
+      border-radius: 12px;
+      font-size: 13.5px;
+      font-weight: 700;
+      cursor: pointer;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+      transition: transform .1s, box-shadow .1s, background .1s;
+      width: 100%;
+    }
+    button:hover { transform: translateY(-1px); box-shadow: 0 5px 15px rgba(0,0,0,0.12); background: #f8fafc; }
+    button:active { transform: translateY(0); }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    #crosshair {
+      position: absolute;
+      top: 50%; left: 50%;
+      width: 10px; height: 10px;
+      border: 2px solid rgba(255,255,255,0.75);
+      border-radius: 50%;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+    }
+
+    #footer {
+      pointer-events: auto;
+      display: flex;
+      gap: 6px;
+      align-items: center;
+      font-size: 12px;
+      color: #6b7280;
+      background: rgba(255,255,255,0.7);
+      backdrop-filter: blur(6px);
+      padding: 7px 14px;
+      border-radius: 22px;
+      border: 1px solid rgba(255,255,255,0.5);
+      user-select: none;
+      flex-wrap: wrap;
+    }
+
+    .key {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 20px; height: 20px;
+      background: #fff;
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 800;
+      color: #475569;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.06);
+      flex-shrink: 0;
+    }
+
+    .label {
+      font-size: 12px;
+      color: #6b7280;
+      white-space: nowrap;
+    }
+
+    #discovered {
+      pointer-events: none;
+      text-align: right;
+    }
+    #discovered .title {
+      font-size: 13px;
+      font-weight: 700;
+      color: #4a5568;
+      background: rgba(255,255,255,0.7);
+      padding: 8px 14px;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,0.5);
+      display: inline-block;
+    }
+    #discovered .place {
+      margin-top: 5px;
+      font-size: 11px;
+      color: #6b7280;
+      font-weight: 600;
+      padding: 3px 10px;
+      border-radius: 8px;
+      border: 1px dashed rgba(107,114,128,0.35);
+      display: inline-block;
+    }
+    #discovered .place.found {
+      color: #2ecc71;
+      border-style: solid;
+      border-color: rgba(46,204,113,0.45);
+      background: rgba(46,204,113,0.08);
+    }
+  </style>
+</head>
+<body>
+
+  <div id="ui">
+    <div id="header">
+      <h1>Kettle Hill</h1>
+      <p class="sub">A peaceful Ghibli-style exploration. Wander the rolling hills and find the kettle at the summit.</p>
+      <div id="controls">
+        <button id="startBtn">Enter the Hill</button>
+        <button id="orbitBtn" style="display:none;">Orbit Camera</button>
+      </div>
+    </div>
+
+    <div id="crosshair"></div>
+
+    <div id="footer">
+      <span class="key">WASD</span><span class="label">Move</span>
+      <span class="key">Space</span><span class="label">Jump</span>
+      <span class="key">Shift</span><span class="label">Run</span>
+      <span class="key">Esc</span><span class="label">Release</span>
+    </div>
+
+    <div id="discovered">
+      <div class="title">Places found: <span id="count">0</span> / 4</div>
+      <div class="place" id="p-cottage">🏠 Cozy Cottage</div>
+      <div class="place" id="p-kettle">🫖 The Summit Kettle</div>
+      <div class="place" id="p-pond">🌿 Lily Pond</div>
+      <div class="place" id="p-grove">🌳 Cherry Grove</div>
+    </div>
+  </div>
+
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "./three.module.js",
+        "three/addons/": "./three-addons/"
+      }
+    }
+  </script>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+    import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+    import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+
+    /* ---------------------------------------------------------------- */
+    // Config
+    const FOG_COLOR = 0xffe3d1;
+    const SKY_TOP = new THREE.Color(0x8ecae6);
+    const SKY_HORIZON = new THREE.Color(0xffd6ba);
+    const GRASS_COLOR = 0xa8dba8;
+    const GRASS_DARK = 0x7fb069;
+    const WATER_COLOR = 0x9fd6e8;
+
+    /* ---------------------------------------------------------------- */
+    // Globals
+    let scene, camera, renderer, controls, orbitControls, composer;
+    let clock = new THREE.Clock();
+    let clouds = [];
+    let particleSystem;
+    let discovered = new Set();
+    const placeEls = {
+      cottage: document.getElementById('p-cottage'),
+      kettle: document.getElementById('p-kettle'),
+      pond: document.getElementById('p-pond'),
+      grove: document.getElementById('p-grove'),
+    };
+    const countEl = document.getElementById('count');
+
+    // Movement state (single declaration)
+    const move = { forward: false, backward: false, left: false, right: false, run: false };
+    const velocity = new THREE.Vector3();
+    const direction = new THREE.Vector3();
+    let canJump = false;
+    let prevTime = performance.now();
+
+    /* ---------------------------------------------------------------- */
+    function init() {
+      scene = new THREE.Scene();
+      scene.background = new THREE.Color(0xbde0fe);
+      scene.fog = new THREE.FogExp2(FOG_COLOR, 0.018);
+
+      camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 500);
+      camera.position.set(0, 1.7, 3);
+
+      renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.shadowMap.enabled = true;
+      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+      renderer.outputColorSpace = THREE.SRGBColorSpace;
+      document.body.appendChild(renderer.domElement);
+
+      // Lights
+      const ambient = new THREE.AmbientLight(0xffffff, 0.5);
+      scene.add(ambient);
+
+      const sun = new THREE.DirectionalLight(0xfff3d6, 1.1);
+      sun.position.set(-30, 55, 25);
+      sun.castShadow = true;
+      sun.shadow.mapSize.width = 2048;
+      sun.shadow.mapSize.height = 2048;
+      sun.shadow.camera.near = 0.5;
+      sun.shadow.camera.far = 220;
+      sun.shadow.camera.left = -70;
+      sun.shadow.camera.right = 70;
+      sun.shadow.camera.top = 70;
+      sun.shadow.camera.bottom = -70;
+      sun.shadow.bias = -0.0005;
+      scene.add(sun);
+
+      const fill = new THREE.DirectionalLight(0xd6e6ff, 0.45);
+      fill.position.set(35, 25, -35);
+      scene.add(fill);
+
+      // Sky gradient skydome
+      addSkydome();
+
+      // Ground / rolling hills
+      const ground = createHills();
+      scene.add(ground);
+
+      // Water pond
+      const pond = createPond();
+      pond.position.set(13, 0.02, -7);
+      scene.add(pond);
+
+      // Trees
+      createTree(-6, 0, 2, 1.6);
+      createTree(4, 0, -3, 1.3);
+      createTree(-10, 0, -8, 1.0);
+      createTree(10, 0, 5, 1.5);
+      createTree(-3, 0, -12, 1.2);
+      createTree(14, 0, -10, 1.4);
+
+      // Cherry grove
+      const groveCenter = new THREE.Vector3(-14, 0, 12);
+      for (let i = 0; i < 7; i++) {
+        const ang = (i / 7) * Math.PI * 2;
+        const r = 5 + Math.random() * 2.5;
+        createTree(groveCenter.x + Math.cos(ang) * r, 0, groveCenter.z + Math.sin(ang) * r, 0.9 + Math.random() * 0.5, 0xffb7c5, 0xff9aa2);
+      }
+
+      // Cottage
+      const cottage = createCottage();
+      cottage.position.set(-8, 0, 4);
+      scene.add(cottage);
+
+      // Kettle landmark at summit
+      const kettle = createKettle();
+      kettle.position.set(22, 2, -14);
+      scene.add(kettle);
+
+      // Details
+      scatterGrass(150);
+      scatterFlowers(50);
+
+      // Clouds
+      for (let i = 0; i < 8; i++) clouds.push(createCloud());
+
+      // Fireflies
+      createFireflies();
+
+      // Controls
+      controls = new PointerLockControls(camera, document.body);
+      const startBtn = document.getElementById('startBtn');
+      const orbitBtn = document.getElementById('orbitBtn');
+
+      startBtn.addEventListener('click', () => controls.lock());
+
+      controls.addEventListener('lock', () => {
+        startBtn.style.display = 'none';
+        orbitBtn.style.display = 'inline-block';
+        document.getElementById('crosshair').style.borderColor = '#fff';
+      });
+      controls.addEventListener('unlock', () => {
+        startBtn.style.display = 'inline-block';
+        orbitBtn.style.display = 'none';
+        document.getElementById('crosshair').style.borderColor = 'rgba(255,255,255,0.75)';
+      });
+
+      orbitBtn.addEventListener('click', () => {
+        controls.unlock();
+        orbitControls.enabled = true;
+        controls.enabled = false;
+      });
+
+      orbitControls = new OrbitControls(camera, renderer.domElement);
+      orbitControls.enabled = false;
+      orbitControls.target.set(0, 1, 0);
+      orbitControls.minDistance = 3;
+      orbitControls.maxDistance = 60;
+      orbitControls.enableDamping = true;
+
+      // Keyboard
+      document.addEventListener('keydown', onKeyDown);
+      document.addEventListener('keyup', onKeyUp);
+
+      // Post-processing
+      composer = new EffectComposer(renderer);
+      composer.addPass(new RenderPass(scene, camera));
+      const bloomPass = new UnrealBloomPass(
+        new THREE.Vector2(window.innerWidth, window.innerHeight),
+        1.3, 0.45, 0.15
+      );
+      composer.addPass(bloomPass);
+
+      window.addEventListener('resize', onWindowResize);
+
+      animate();
+    }
+
+    /* ---------------------------------------------------------------- */
+    function addSkydome() {
+      const geometry = new THREE.SphereGeometry(400, 64, 32);
+      geometry.scale(-1, 1, 1);
+
+      const vertexShader = `
+        varying vec2 vUv;
+        varying vec3 vWorldPos;
+        void main() {
+          vUv = uv;
+          vec4 w = modelMatrix * vec4(position, 1.0);
+          vWorldPos = w.xyz;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `;
+      const fragmentShader = `
+        uniform vec3 topColor;
+        uniform vec3 horizonColor;
+        varying vec2 vUv;
+        varying vec3 vWorldPos;
+        void main() {
+          float h = normalize(vWorldPos).y;
+          float t = smoothstep(-0.25, 0.95, h);
+          vec3 color = mix(horizonColor, topColor, t);
+          float noise = sin(vUv.x * 38.0) * cos(vUv.y * 28.0) * 0.5 + 0.5;
+          color += vec3(0.05, 0.07, 0.11) * smoothstep(0.5, 0.85, noise) * (1.0 - t);
+          gl_FragColor = vec4(color, 1.0);
+        }
+      `;
+      const material = new THREE.ShaderMaterial({
+        uniforms: { topColor: { value: SKY_TOP }, horizonColor: { value: SKY_HORIZON } },
+        vertexShader,
+        fragmentShader,
+        side: THREE.BackSide,
+        depthWrite: false,
+      });
+      const sky = new THREE.Mesh(geometry, material);
+      scene.add(sky);
+    }
+
+    /* ---------------------------------------------------------------- */
+    function hillHeightAt(x, z) {
+      let y = Math.sin(x * 0.05 + z * 0.03) * 2.2;
+      y += Math.sin(x * 0.12 - z * 0.07) * 1.4;
+      y += Math.sin(x * 0.03 + z * 0.09) * 3.0;
+      y += Math.max(0, 6 - Math.sqrt(x * x + z * z) * 0.15) * 0.5;
+      return y;
+    }
+
+    function createHills() {
+      const size = 200;
+      const res = 64;
+      const geometry = new THREE.PlaneGeometry(size, size, res, res);
+      geometry.rotateX(-Math.PI / 2);
+
+      const positions = geometry.attributes.position;
+      const colors = [];
+      const color = new THREE.Color();
+
+      for (let i = 0; i < positions.count; i++) {
+        const x = positions.getX(i);
+        const z = positions.getZ(i);
+        positions.setY(i, hillHeightAt(x, z));
+        const t = (hillHeightAt(x, z) + 4) / 12;
+        color.lerpColors(new THREE.Color(GRASS_DARK), new THREE.Color(GRASS_COLOR), THREE.MathUtils.clamp(t, 0, 1));
+        colors.push(color.r, color.g, color.b);
+      }
+      geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+      geometry.computeVertexNormals();
+
+      const material = new THREE.MeshStandardMaterial({
+        vertexColors: true,
+        roughness: 0.95,
+        metalness: 0.0,
+        flatShading: false,
+      });
+      const mesh = new THREE.Mesh(geometry, material);
+      mesh.receiveShadow = true;
+      return mesh;
+    }
+
+    /* ---------------------------------------------------------------- */
+    function createTree(x, y, z, scale, leafColor = 0x9fd6a8, trunkColor = 0x8b6b4f) {
+      const group = new THREE.Group();
+
+      const trunkGeo = new THREE.CylinderGeometry(0.22 * scale, 0.3 * scale, 1.8 * scale, 8);
+      const trunkMat = new THREE.MeshStandardMaterial({ color: trunkColor, roughness: 0.9 });
+      const trunk = new THREE.Mesh(trunkGeo, trunkMat);
+      trunk.position.y = 0.9 * scale;
+      trunk.castShadow = true;
+      trunk.receiveShadow = true;
+      group.add(trunk);
+
+      const leafMat = new THREE.MeshStandardMaterial({ color: leafColor, roughness: 1.0, flatShading: true });
+      for (let i = 0; i < 5; i++) {
+        const leaf = new THREE.Mesh(
+          new THREE.SphereGeometry(0.8 * scale + Math.random() * 0.4 * scale, 10, 8),
+          leafMat
+        );
+        leaf.position.set(
+          (Math.random() - 0.5) * 1.2 * scale,
+          1.4 * scale + Math.random() * 1.2 * scale,
+          (Math.random() - 0.5) * 1.2 * scale
+        );
+        leaf.scale.setScalar(0.85 + Math.random() * 0.3);
+        leaf.castShadow = true;
+        group.add(leaf);
+      }
+
+      group.position.set(x, y, z);
+      group.scale.setScalar(scale);
+      scene.add(group);
+      return group;
+    }
+
+    /* ---------------------------------------------------------------- */
+    function createCottage() {
+      const group = new THREE.Group();
+
+      const walls = new THREE.Mesh(
+        new THREE.BoxGeometry(5, 3.2, 4),
+        new THREE.MeshStandardMaterial({ color: 0xe6d8c3, roughness: 0.9 })
+      );
+      walls.position.y = 1.6;
+      walls.castShadow = true;
+      walls.receiveShadow = true;
+      group.add(walls);
+
+      const roof = new THREE.Mesh(
+        new THREE.ConeGeometry(3.6, 4, 4),
+        new THREE.MeshStandardMaterial({ color: 0xe07a5f, roughness: 1.0 })
+      );
+      roof.rotation.y = Math.PI / 4;
+      roof.position.y = 4.1;
+      roof.castShadow = true;
+      group.add(roof);
+
+      const door = new THREE.Mesh(
+        new THREE.BoxGeometry(1, 1.8, 0.12),
+        new THREE.MeshStandardMaterial({ color: 0x6f4e37, roughness: 0.8 })
+      );
+      door.position.set(0, 0.9, 2.06);
+      group.add(door);
+
+      const winMatF = new THREE.MeshStandardMaterial({ color: 0x4a3b2e, roughness: 0.8 });
+      const winMatP = new THREE.MeshBasicMaterial({ color: 0xfff2b0 });
+      for (const sx of [-1.5, 1.5]) {
+        const f = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1, 0.12), winMatF);
+        f.position.set(sx, 1.4, 2.06);
+        const p = new THREE.Mesh(new THREE.BoxGeometry(1.05, 0.85, 0.11), winMatP);
+        p.position.set(sx, 1.4, 2.061);
+        group.add(f);
+        group.add(p);
+      }
+
+      const chim = new THREE.Mesh(
+        new THREE.BoxGeometry(0.5, 1.2, 0.5),
+        new THREE.MeshStandardMaterial({ color: 0xb08d5c, roughness: 0.9 })
+      );
+      chim.position.set(1.8, 4.9, 1.2);
+      chim.castShadow = true;
+      group.add(chim);
+
+      const light = new THREE.PointLight(0xfff2b0, 2.5, 12);
+      light.position.set(0, 1.6, 2.0);
+      group.add(light);
+
+      const porch = new THREE.Mesh(
+        new THREE.BoxGeometry(5.4, 0.25, 4.4),
+        new THREE.MeshStandardMaterial({ color: 0xd4b899, roughness: 0.9 })
+      );
+      porch.position.y = 0;
+      porch.receiveShadow = true;
+      group.add(porch);
+
+      return group;
+    }
+
+    /* ---------------------------------------------------------------- */
+    function createKettle() {
+      const group = new THREE.Group();
+      const bodyMat = new THREE.MeshStandardMaterial({ color: 0xe8856d, roughness: 0.6, metalness: 0.15 });
+      const handleMat = new THREE.MeshStandardMaterial({ color: 0x5d4037, roughness: 0.8 });
+
+      const body = new THREE.Mesh(new THREE.CylinderGeometry(1.6, 1.9, 3.2, 16), bodyMat);
+      body.position.y = 1.6;
+      body.castShadow = true;
+      body.receiveShadow = true;
+      group.add(body);
+
+      const belly = new THREE.Mesh(new THREE.SphereGeometry(1.9, 16, 12), bodyMat);
+      belly.position.y = 1.0;
+      belly.scale.set(1, 0.55, 1);
+      belly.castShadow = true;
+      belly.receiveShadow = true;
+      group.add(belly);
+
+      const lid = new THREE.Mesh(new THREE.CylinderGeometry(1.35, 1.55, 0.5, 16), bodyMat);
+      lid.position.y = 3.45;
+      lid.castShadow = true;
+      group.add(lid);
+      const knob = new THREE.Mesh(new THREE.SphereGeometry(0.35, 12, 8), bodyMat);
+      knob.position.y = 3.8;
+      group.add(knob);
+
+      const spout = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.25, 1.6, 8), bodyMat);
+      spout.position.set(2.1, 1.55, 0);
+      spout.rotation.z = -0.25;
+      spout.rotation.y = Math.PI / 2;
+      spout.castShadow = true;
+      group.add(spout);
+
+      const handle = new THREE.Mesh(new THREE.TorusGeometry(0.95, 0.18, 8, 16, Math.PI / 1.6), handleMat);
+      handle.position.set(-2.1, 1.9, 0);
+      handle.rotation.x = Math.PI / 2;
+      handle.rotation.z = 0.3;
+      handle.castShadow = true;
+      group.add(handle);
+
+      const glow = new THREE.Mesh(
+        new THREE.CylinderGeometry(1.7, 1.7, 0.15, 16),
+        new THREE.MeshBasicMaterial({ color: 0xfff2b0, transparent: true, opacity: 0.5 })
+      );
+      glow.position.y = 0.08;
+      glow.rotation.x = Math.PI / 2;
+      group.add(glow);
+
+      group.userData = {
+        type: 'kettle',
+        float: { speed: 1.2 + Math.random(), offset: Math.random() * Math.PI * 2, baseY: 2 },
+      };
+      return group;
+    }
+
+    /* ---------------------------------------------------------------- */
+    function createPond() {
+      const group = new THREE.Group();
+
+      const waterGeo = new THREE.PlaneGeometry(8, 8, 32, 32);
+      waterGeo.rotateX(-Math.PI / 2);
+      const waterMat = new THREE.MeshStandardMaterial({
+        color: WATER_COLOR, roughness: 0.2, metalness: 0.1, transparent: true, opacity: 0.85,
+      });
+      const water = new THREE.Mesh(waterGeo, waterMat);
+      water.receiveShadow = true;
+      group.add(water);
+
+      const padMat = new THREE.MeshStandardMaterial({ color: 0x5b8c5a, roughness: 1.0 });
+      for (let i = 0; i < 12; i++) {
+        const pad = new THREE.Mesh(new THREE.CircleGeometry(0.35 + Math.random() * 0.3, 8), padMat);
+        pad.position.set((Math.random() - 0.5) * 7, 0.035, (Math.random() - 0.5) * 7);
+        pad.rotation.x = -Math.PI / 2 + (Math.random() - 0.5) * 0.2;
+        pad.rotation.z = Math.random() * Math.PI * 2;
+        group.add(pad);
+      }
+
+      const positions = waterGeo.attributes.position;
+      const originals = [];
+      for (let i = 0; i < positions.count; i++) originals.push(positions.getX(i), positions.getY(i), positions.getZ(i));
+      water.userData = { type: 'water', positions, originals };
+      group.userData.waterMesh = water;
+      return group;
+    }
+
+    /* ---------------------------------------------------------------- */
+    function scatterGrass(count) {
+      const geo = new THREE.CylinderGeometry(0.06, 0.02, 0.35 + Math.random() * 0.3, 4);
+      const mat = new THREE.MeshStandardMaterial({ color: GRASS_COLOR, roughness: 1.0 });
+      for (let i = 0; i < count; i++) {
+        const x = (Math.random() - 0.5) * 150;
+        const z = (Math.random() - 0.5) * 150;
+        const y = hillHeightAt(x, z);
+        const blade = new THREE.Mesh(geo, mat.clone());
+        blade.position.set(x, y + 0.2, z);
+        blade.rotation.x = (Math.random() - 0.5) * 0.3;
+        blade.rotation.z = (Math.random() - 0.5) * 0.3;
+        blade.scale.setScalar(0.8 + Math.random() * 0.6);
+        blade.castShadow = true;
+        blade.receiveShadow = true;
+        scene.add(blade);
+      }
+    }
+
+    function scatterFlowers(count) {
+      const colors = [0xffb7c5, 0xffd6ba, 0xff9aa2, 0xfff3d6];
+      const geo = new THREE.CylinderGeometry(0.05, 0.05, 0.25, 6);
+      for (let i = 0; i < count; i++) {
+        const x = (Math.random() - 0.5) * 130;
+        const z = (Math.random() - 0.5) * 130;
+        const y = hillHeightAt(x, z);
+        const flower = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: colors[Math.floor(Math.random() * colors.length)] }));
+        flower.position.set(x, y + 0.14, z);
+        scene.add(flower);
+      }
+    }
+
+    /* ---------------------------------------------------------------- */
+    function createCloud() {
+      const group = new THREE.Group();
+      const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1.0, transparent: true, opacity: 0.85 });
+      for (let i = 0; i < 5 + Math.floor(Math.random() * 5); i++) {
+        const s = 0.6 + Math.random() * 1.2;
+        const puff = new THREE.Mesh(new THREE.SphereGeometry(s, 10, 8), mat);
+        puff.position.set((Math.random() - 0.5) * 3, Math.random() * 1.2, (Math.random() - 0.5) * 3);
+        puff.scale.setScalar(0.8 + Math.random() * 0.5);
+        group.add(puff);
+      }
+      group.position.set((Math.random() - 0.5) * 120, 22 + Math.random() * 28, (Math.random() - 0.5) * 120);
+      group.userData = {
+        speed: 0.12 + Math.random() * 0.22,
+        dir: new THREE.Vector3((Math.random() - 0.5) * 0.5, 0, (Math.random() - 0.5) * 0.5).normalize(),
+        bob: Math.random() * Math.PI * 2,
+        bobSpeed: 0.6 + Math.random(),
+      };
+      scene.add(group);
+      return group;
+    }
+
+    /* ---------------------------------------------------------------- */
+    function createFireflies() {
+      const count = 55;
+      const geo = new THREE.BufferGeometry();
+      const positions = new Float32Array(count * 3);
+      const offsets = [];
+      const speeds = [];
+      const baseY = [];
+      for (let i = 0; i < count; i++) {
+        positions[i * 3] = (Math.random() - 0.5) * 38;
+        positions[i * 3 + 1] = 1.2 + Math.random() * 5;
+        positions[i * 3 + 2] = (Math.random() - 0.5) * 38;
+        offsets.push(Math.random() * Math.PI * 2);
+        speeds.push(0.7 + Math.random() * 1.1);
+        baseY.push(positions[i * 3 + 1]);
+      }
+      geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+      const points = new THREE.Points(geo, new THREE.PointsMaterial({ color: 0xfff2b0, size: 0.13, transparent: true, opacity: 0.9, sizeAttenuation: true }));
+      points.userData = { positions, offsets, speeds, baseY };
+      scene.add(points);
+      particleSystem = points;
+    }
+
+    /* ---------------------------------------------------------------- */
+    function onWindowResize() {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      composer.setSize(window.innerWidth, window.innerHeight);
+    }
+
+    function onKeyDown(e) {
+      if (e.code === 'KeyW') move.forward = true;
+      if (e.code === 'KeyS') move.backward = true;
+      if (e.code === 'KeyA') move.left = true;
+      if (e.code === 'KeyD') move.right = true;
+      if (e.code === 'ShiftLeft') move.run = true;
+      if (e.code === 'Space' && canJump && controls.isLocked) { velocity.y += 5.5; canJump = false; }
+    }
+    function onKeyUp(e) {
+      if (e.code === 'KeyW') move.forward = false;
+      if (e.code === 'KeyS') move.backward = false;
+      if (e.code === 'KeyA') move.left = false;
+      if (e.code === 'KeyD') move.right = false;
+      if (e.code === 'ShiftLeft') move.run = false;
+    }
+
+    /* ---------------------------------------------------------------- */
+    function checkDiscovery() {
+      if (!controls.isLocked) return;
+      const pos = new THREE.Vector3();
+      controls.getObject().getWorldPosition(pos);
+
+      const places = [
+        { id: 'cottage', pos: new THREE.Vector3(-8, 0, 4), radius: 7 },
+        { id: 'kettle', pos: new THREE.Vector3(22, 2, -14), radius: 9 },
+        { id: 'pond', pos: new THREE.Vector3(13, 0, -7), radius: 6 },
+        { id: 'grove', pos: new THREE.Vector3(-14, 0, 12), radius: 9 },
+      ];
+
+      for (const p of places) {
+        if (!discovered.has(p.id) && pos.distanceTo(p.pos) < p.radius) {
+          discovered.add(p.id);
+          const el = placeEls[p.id];
+          if (el) el.classList.add('found');
+          countEl.textContent = discovered.size;
+          document.title = `Found: ${p.id.charAt(0).toUpperCase() + p.id.slice(1)} — Kettle Hill`;
+          setTimeout(() => { document.title = 'Kettle Hill — A Ghibli-Style Exploration'; }, 2500);
+        }
+      }
+    }
+
+    /* ---------------------------------------------------------------- */
+    function animate() {
+      requestAnimationFrame(animate);
+      const time = performance.now();
+      const delta = (time - prevTime) / 1000;
+      prevTime = time;
+      const t = time * 0.001;
+
+      const isLocked = controls && controls.isLocked;
+
+      if (isLocked) {
+        // gravity / jump applied below after horizontal movement
+        const camDir = new THREE.Vector3();
+        camera.getWorldDirection(camDir);
+        camDir.y = 0;
+        camDir.normalize();
+        const camRight = new THREE.Vector3().crossVectors(camDir, camera.up).normalize();
+
+        const moveZ = Number(move.forward) - Number(move.backward);
+        const moveX = Number(move.right) - Number(move.left);
+
+        const worldMove = new THREE.Vector3()
+          .addScaledVector(camDir, moveZ)
+          .addScaledVector(camRight, moveX);
+        worldMove.y = 0;
+        if (worldMove.lengthSq() > 0.0001) {
+          worldMove.normalize();
+          const speed = move.run ? 15 : 7.5;
+          camera.position.x += worldMove.x * speed * delta;
+          camera.position.z += worldMove.z * speed * delta;
+        }
+
+        // gravity / jump (y axis only)
+        velocity.y -= 9.8 * 2.2 * delta;
+        camera.position.y += velocity.y * delta;
+
+        const hillY = hillHeightAt(camera.position.x, camera.position.z);
+        const eyeY = hillY + 1.7;
+        if (camera.position.y < eyeY) {
+          velocity.y = 0;
+          camera.position.y = eyeY;
+          canJump = true;
+        } else {
+          canJump = false;
+        }
+
+        checkDiscovery();
+      }
+
+      // clouds
+      for (const cloud of clouds) {
+        const d = cloud.userData.dir;
+        cloud.position.x += d.x * cloud.userData.speed * 0.7;
+        cloud.position.z += d.z * cloud.userData.speed * 0.7;
+        cloud.position.y += Math.sin(t * cloud.userData.bobSpeed + cloud.userData.bob) * 0.004;
+        if (cloud.position.x > 105) cloud.position.x = -105;
+        if (cloud.position.x < -105) cloud.position.x = 105;
+        if (cloud.position.z > 105) cloud.position.z = -105;
+        if (cloud.position.z < -105) cloud.position.z = -105;
+      }
+
+      // kettle float
+      scene.traverse((obj) => {
+        if (obj.userData.type === 'kettle') {
+          obj.position.y = obj.userData.float.baseY + Math.sin(t * obj.userData.float.speed + obj.userData.float.offset) * 0.35;
+        }
+        if (obj.userData.type === 'water') {
+          const mesh = obj.userData.waterMesh;
+          const { positions, originals } = obj.userData;
+          for (let i = 0; i < positions.count; i++) {
+            positions.setY(i, originals[i * 3 + 1] + Math.sin(t * 2 + originals[i * 3] * 0.5 + originals[i * 3 + 2] * 0.5) * 0.06);
+          }
+          positions.needsUpdate = true;
+          mesh.geometry.computeVertexNormals();
+        }
+      });
+
+      // fireflies
+      if (particleSystem) {
+        const pos = particleSystem.geometry.attributes.position;
+        const ud = particleSystem.userData;
+        for (let i = 0; i < pos.count; i++) {
+          pos.setY(i, ud.baseY[i] + Math.sin(t * ud.speeds[i] + ud.offsets[i]) * 0.02);
+        }
+        pos.needsUpdate = true;
+        particleSystem.material.opacity = 0.6 + Math.sin(t * 1.6) * 0.3;
+      }
+
+      // window glow pulse
+      scene.traverse((obj) => {
+        if (obj.isLight && obj.color.getHex() === 0xfff2b0) {
+          obj.intensity = 2.2 + Math.sin(t * 3) * 0.5;
+        }
+      });
+
+      if (orbitControls.enabled) orbitControls.update();
+      composer.render();
+    }
+
+    // Start with error handling + loading fallback
+    const loadingEl = document.createElement('div');
+    loadingEl.style.cssText = 'position:absolute;inset:0;background:#bde0fe;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:20;font-family:system-ui,sans-serif;color:#4a5568;';
+    loadingEl.innerHTML = '<div style="font-size:20px;font-weight:700;margin-bottom:8px;">Loading Kettle Hill…</div><div style="font-size:13px;color:#6b7280;">Preparing the hills</div>';
+    document.body.appendChild(loadingEl);
+
+    try {
+      init();
+      loadingEl.style.opacity = '0';
+      setTimeout(() => loadingEl.remove(), 600);
+    } catch (err) {
+      console.error('Kettle Hill failed to start:', err);
+      loadingEl.innerHTML = '<div style="font-size:16px;font-weight:700;color:#c0392b;">Unable to load 3D scene.</div><div style="font-size:13px;margin-top:8px;color:#6b7280;">Please refresh the page.</div>';
+    }
+  </script>
+</body>
+</html>
